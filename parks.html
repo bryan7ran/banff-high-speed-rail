@@ -22,53 +22,49 @@
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    // Fetch CSV data and convert to GeoJSON
-    fetch('parks.csv')
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Network response was not ok ' + response.statusText);
-        }
-        return response.text();
-      })
-      .then(csvText => {
-        const lines = csvText.trim().split('\\n');
-        const headers = lines[0].split(',').map(header => header.trim().replace(/"/g, ''));
-        const geojson = {
-          type: 'FeatureCollection',
-          features: lines.slice(1).map(line => {
-            const values = line.split(',').map(value => value.trim().replace(/"/g, ''));
-            const properties = {};
-            const geometry = {
-              type: 'Point',
-              coordinates: []
-            };
-            headers.forEach((header, i) => {
-              if (header === 'lon') {
-                geometry.coordinates[0] = parseFloat(values[i]);
-              } else if (header === 'lat') {
-                geometry.coordinates[1] = parseFloat(values[i]);
-              } else {
-                properties[header] = values[i];
-              }
-            });
-            return {
-              type: 'Feature',
-              properties: properties,
-              geometry: geometry
-            };
-          })
+    Promise.all([
+      fetch('parks.csv').then(response => response.text()),
+      fetch('parks_2025-06-09.geojson').then(response => response.json())
+    ]).then(([csvText, geojsonData]) => {
+      const lines = csvText.trim().split('\\n');
+      const headers = lines[0].split(',').map(header => header.trim().replace(/"/g, ''));
+      const csvFeatures = lines.slice(1).map(line => {
+        const values = line.split(',').map(value => value.trim().replace(/"/g, ''));
+        const properties = {};
+        const geometry = {
+          type: 'Point',
+          coordinates: []
         };
-        L.geoJSON(geojson, {
-          onEachFeature: function (feature, layer) {
-            if (feature.properties && feature.properties.name) {
-              layer.bindPopup(feature.properties.name);
-            }
+        headers.forEach((header, i) => {
+          if (header === 'lon') {
+            geometry.coordinates[0] = parseFloat(values[i]);
+          } else if (header === 'lat') {
+            geometry.coordinates[1] = parseFloat(values[i]);
+          } else {
+            properties[header] = values[i];
           }
-        }).addTo(map);
-      })
-      .catch(error => {
-        console.error('There has been a problem with your fetch operation:', error);
+        });
+        return {
+          type: 'Feature',
+          properties: properties,
+          geometry: geometry
+        };
       });
+
+      const allFeatures = geojsonData.features.concat(csvFeatures);
+      L.geoJSON(allFeatures, {
+        style: function (feature) {
+          return feature.properties && feature.properties.style;
+        },
+        onEachFeature: function (feature, layer) {
+          if (feature.properties && feature.properties.name) {
+            layer.bindPopup(feature.properties.name);
+          }
+        }
+      }).addTo(map);
+    }).catch(error => {
+      console.error('There has been a problem with your fetch operation:', error);
+    });
   </script>
 </body>
 </html>
