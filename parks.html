@@ -15,23 +15,56 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script>
     // Initialize the map
-    var map = L.map('map').setView([49.2827, -123.1207], 10);
+    var map = L.map('map').setView([53.5461, -113.4938], 10);
 
     // Add OpenStreetMap tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    // Fetch GeoJSON data
-    fetch('parks_2025-06-09.geojson')
+    // Fetch CSV data and convert to GeoJSON
+    fetch('parks.csv')
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok ' + response.statusText);
         }
-        return response.json();
+        return response.text();
       })
-      .then(data => {
-        L.geoJSON(data).addTo(map);
+      .then(csvText => {
+        const lines = csvText.trim().split('\\n');
+        const headers = lines[0].split(',').map(header => header.trim().replace(/"/g, ''));
+        const geojson = {
+          type: 'FeatureCollection',
+          features: lines.slice(1).map(line => {
+            const values = line.split(',').map(value => value.trim().replace(/"/g, ''));
+            const properties = {};
+            const geometry = {
+              type: 'Point',
+              coordinates: []
+            };
+            headers.forEach((header, i) => {
+              if (header === 'lon') {
+                geometry.coordinates[0] = parseFloat(values[i]);
+              } else if (header === 'lat') {
+                geometry.coordinates[1] = parseFloat(values[i]);
+              } else {
+                properties[header] = values[i];
+              }
+            });
+            return {
+              type: 'Feature',
+              properties: properties,
+              geometry: geometry
+            };
+          })
+        };
+        L.geoJSON(geojson, {
+          onEachFeature: function (feature, layer) {
+            if (feature.properties && feature.properties.name) {
+              layer.bindPopup(feature.properties.name);
+            }
+          }
+        }).addTo(map);
       })
       .catch(error => {
         console.error('There has been a problem with your fetch operation:', error);
